@@ -49,18 +49,29 @@ use zerocopy::IntoBytes;
 /// // Build the bytes into a binary image for the target device...
 /// ```
 #[derive(Debug)]
-pub struct TargetAllocator {
+pub struct TargetAllocator<A: core::alloc::Allocator = alloc::alloc::Global> {
     base_address: u64,
     allocations: Vec<Option<NonNull<PageTable>>>,
+    allocator: A,
 }
 
-impl TargetAllocator {
+impl TargetAllocator<alloc::alloc::Global> {
     /// Creates a new `TargetAllocator` for a page table which will be loaded on the target in a
     /// contiguous block of memory starting at the given address.
     pub fn new(base_address: u64) -> Self {
+        Self::new_in(base_address, alloc::alloc::Global)
+    }
+}
+
+impl<A> TargetAllocator<A>
+where
+    A: core::alloc::Allocator,
+{
+    pub fn new_in(base_address: u64, allocator: A) -> Self {
         Self {
             base_address,
             allocations: vec![],
+            allocator,
         }
     }
 
@@ -108,7 +119,7 @@ impl TargetAllocator {
 
 impl Translation for TargetAllocator {
     fn allocate_table(&mut self) -> (NonNull<PageTable>, PhysicalAddress) {
-        let page_table = PageTable::new();
+        let page_table = PageTable::new_in(self.allocator);
         let index = self.add_allocation(page_table);
         let address = PhysicalAddress(
             usize::try_from(self.base_address).unwrap() + index * size_of::<PageTable>(),

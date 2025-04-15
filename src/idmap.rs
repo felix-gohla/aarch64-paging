@@ -17,7 +17,7 @@ use core::ptr::NonNull;
 
 /// Identity mapping, where every virtual address is either unmapped or mapped to the identical IPA.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct IdTranslation;
+pub struct IdTranslation<A: core::alloc::Allocator = alloc::alloc::Global>(A);
 
 impl IdTranslation {
     fn virtual_to_physical(va: VirtualAddress) -> PhysicalAddress {
@@ -25,9 +25,12 @@ impl IdTranslation {
     }
 }
 
-impl Translation for IdTranslation {
+impl<A> Translation for IdTranslation<A>
+where
+    A: core::alloc::Allocator,
+{
     fn allocate_table(&mut self) -> (NonNull<PageTable>, PhysicalAddress) {
-        let table = PageTable::new();
+        let table = PageTable::new_in(&self.0);
 
         // Physical address is the same as the virtual address because we are using identity mapping
         // everywhere.
@@ -105,16 +108,31 @@ impl Translation for IdTranslation {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct IdMap {
-    mapping: Mapping<IdTranslation>,
+pub struct IdMap<A: core::alloc::Allocator = alloc::alloc::Global> {
+    mapping: Mapping<IdTranslation<A>>,
 }
 
-impl IdMap {
+impl IdMap<alloc::alloc::Global> {
     /// Creates a new identity-mapping page table with the given ASID and root level.
     pub fn new(asid: usize, rootlevel: usize, translation_regime: TranslationRegime) -> Self {
+        Self::new_in(asid, rootlevel, translation_regime, alloc::alloc::Global)
+    }
+}
+
+impl<A> IdMap<A>
+where
+    A: core::alloc::Allocator,
+{
+    /// Creates a new identity-mapping page table with the given ASID and root level.
+    pub fn new_in(
+        asid: usize,
+        rootlevel: usize,
+        translation_regime: TranslationRegime,
+        allocator: A,
+    ) -> Self {
         Self {
             mapping: Mapping::new(
-                IdTranslation,
+                IdTranslation(allocator),
                 asid,
                 rootlevel,
                 translation_regime,

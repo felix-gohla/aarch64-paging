@@ -18,24 +18,34 @@ use core::ptr::NonNull;
 /// Linear mapping, where every virtual address is either unmapped or mapped to an IPA with a fixed
 /// offset.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct LinearTranslation {
+pub struct LinearTranslation<A: core::alloc::Allocator = alloc::alloc::Global> {
     /// The offset from a virtual address to the corresponding (intermediate) physical address.
     offset: isize,
+    allocator: A,
 }
 
-impl LinearTranslation {
+impl LinearTranslation<alloc::alloc::Global> {
+    pub fn new(offset: isize) -> Self {
+        Self::new_in(offset, alloc::alloc::Global)
+    }
+}
+
+impl<A> LinearTranslation<A>
+where
+    A: core::alloc::Allocator,
+{
     /// Constructs a new linear translation, which will map a virtual address `va` to the
     /// (intermediate) physical address `va + offset`.
     ///
     /// The `offset` must be a multiple of [`PAGE_SIZE`]; if not this will panic.
-    pub fn new(offset: isize) -> Self {
+    pub fn new_in(offset: isize, allocator: A) -> Self {
         if !is_aligned(offset.unsigned_abs(), PAGE_SIZE) {
             panic!(
                 "Invalid offset {}, must be a multiple of page size {}.",
                 offset, PAGE_SIZE,
             );
         }
-        Self { offset }
+        Self { offset, allocator }
     }
 
     fn virtual_to_physical(&self, va: VirtualAddress) -> Result<PhysicalAddress, MapError> {
@@ -49,7 +59,7 @@ impl LinearTranslation {
 
 impl Translation for LinearTranslation {
     fn allocate_table(&mut self) -> (NonNull<PageTable>, PhysicalAddress) {
-        let table = PageTable::new();
+        let table = PageTable::new_in(&self.allocator);
         // Assume that the same linear mapping is used everywhere.
         let va = VirtualAddress(table.as_ptr() as usize);
 

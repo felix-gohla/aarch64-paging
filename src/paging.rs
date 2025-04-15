@@ -857,9 +857,9 @@ impl PageTable {
     /// Allocates a new zeroed, appropriately-aligned pagetable on the heap using the global
     /// allocator and returns a pointer to it.
     #[cfg(feature = "alloc")]
-    pub fn new() -> NonNull<Self> {
+    pub fn new_in<A: core::alloc::Allocator>(alloc: A) -> NonNull<Self> {
         // SAFETY: Zeroed memory is a valid initialisation for a PageTable.
-        unsafe { allocate_zeroed() }
+        unsafe { allocate_zeroed_in(alloc) }
     }
 }
 
@@ -966,16 +966,16 @@ impl Debug for Descriptor {
 ///
 /// It must be valid to initialise the type `T` by simply zeroing its memory.
 #[cfg(feature = "alloc")]
-unsafe fn allocate_zeroed<T>() -> NonNull<T> {
+unsafe fn allocate_zeroed_in<T, A: core::alloc::Allocator>(allocator: A) -> NonNull<T> {
     let layout = Layout::new::<T>();
     assert_ne!(layout.size(), 0);
     // SAFETY: We just checked that the layout has non-zero size.
-    let pointer = unsafe { alloc_zeroed(layout) };
-    if pointer.is_null() {
-        handle_alloc_error(layout);
-    }
-    // SAFETY: We just checked that the pointer is non-null.
-    unsafe { NonNull::new_unchecked(pointer as *mut T) }
+    let pointer = allocator.allocate_zeroed(layout);
+    let ret = match pointer {
+        Ok(ptr) => ptr.cast(),
+        Err(_) => handle_alloc_error(layout),
+    };
+    ret
 }
 
 /// Deallocates the heap space for a `T` which was previously allocated by `allocate_zeroed`.

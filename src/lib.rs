@@ -44,6 +44,7 @@
 #![no_std]
 #![deny(clippy::undocumented_unsafe_blocks)]
 #![deny(unsafe_op_in_unsafe_fn)]
+#![feature(allocator_api)]
 
 #[cfg(feature = "alloc")]
 pub mod idmap;
